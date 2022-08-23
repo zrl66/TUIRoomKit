@@ -36,5 +36,7 @@ task clean(type: Delete) {
 
 ext {
     liteavSdk = "com.tencent.liteav:LiteAVSDK_TRTC:latest.release"
-    imSdk = "com.tencent.imsdk:imsdk-plus:latest.release"
+ //   imSdk = "com.tencent.imsdk:imsdk-plus:latest.release"
+  //  imSdk = "com.tencent.imsdk:imsdk-plus-6.6.3002@aar"
+  //  imSdk = "com.tencent.imsdk:imsdk-plus:6.6.3002@aar"
 }

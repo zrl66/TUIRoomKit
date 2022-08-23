@@ -48,6 +48,7 @@ import com.tencent.qcloud.tuikit.tuibeauty.view.TUIBeautyView;
 import com.tencent.rtmp.ui.TXCloudVideoView;
 import com.tencent.trtc.TRTCCloudDef;
 import com.tencent.trtc.TRTCStatistics;
+import com.tencent.tuikit.engine.room.TUIRoomEngineDef;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -81,9 +82,9 @@ public class RoomMainActivity extends AppCompatActivity implements TUIRoomCoreLi
     private int                       mVideoQuality;
     private String                    mUserName;
     private boolean                   mIsFrontCamera = true;
-    private boolean                   mIsUseSpeaker  = true;
-    private TUIRoomCoreDef.SpeechMode mSpeechMode;
-    private TUIRoomCore               mTUIRoomCore;
+    private boolean                     mIsUseSpeaker  = true;
+    private TUIRoomEngineDef.SpeechMode mSpeechMode;
+    private TUIRoomCore                 mTUIRoomCore;
     private List<MemberEntity>        mMemberEntityList;
     private Map<String, MemberEntity> mStringMemberEntityMap;
     private MemberEntity              mSelfEntity;
@@ -111,7 +112,7 @@ public class RoomMainActivity extends AppCompatActivity implements TUIRoomCoreLi
     public static void enterRoom(Context context,
                                  boolean isCreate,
                                  int roomId,
-                                 TUIRoomCoreDef.SpeechMode speechMode,
+                                 TUIRoomEngineDef.SpeechMode speechMode,
                                  String userId,
                                  String userName,
                                  String userAvatar,
@@ -136,6 +137,7 @@ public class RoomMainActivity extends AppCompatActivity implements TUIRoomCoreLi
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        Log.e("AAAAA", "RoomMainActivity onCreate");
         mContext = this;
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         UserModelManager.getInstance().getUserModel().userType = UserModel.UserType.ROOM;
@@ -286,6 +288,7 @@ public class RoomMainActivity extends AppCompatActivity implements TUIRoomCoreLi
     }
 
     private void createRoom() {
+        Log.e("AAAAA", "createRoom mIsCreateRoom : " + mIsCreateRoom);
         if (mIsCreateRoom) {
             mTUIRoomCore.createRoom(mRoomId, mSpeechMode, new TUIRoomCoreCallback.ActionCallback() {
                 @Override
@@ -331,11 +334,13 @@ public class RoomMainActivity extends AppCompatActivity implements TUIRoomCoreLi
     }
 
     private void startCreateOrEnterRoom() {
+        Log.e("AAAAA", "startCreateOrEnterRoom");
         initRoomView();
         FeatureConfig.getInstance().setRecording(false);
         FeatureConfig.getInstance().setAudioVolumeEvaluation(true);
         mTUIRoomCore.setListener(this);
         mRoomHeadBarView.setTitle(getString(R.string.tuiroom_title_entering));
+        Log.e("AAAAA", "createRoom b");
         createRoom();
         mTUIRoomCore.setAudioQuality(mAudioQuality);
         if (mOpenAudio) {
@@ -358,7 +363,7 @@ public class RoomMainActivity extends AppCompatActivity implements TUIRoomCoreLi
         //从外界获取数据源
         Intent starter = getIntent();
         mRoomId = starter.getIntExtra(KEY_ROOM_ID, 0);
-        mSpeechMode = (TUIRoomCoreDef.SpeechMode) starter.getSerializableExtra(KEY_SPEECH_MODE);
+        mSpeechMode = (TUIRoomEngineDef.SpeechMode) starter.getSerializableExtra(KEY_SPEECH_MODE);
         mUserId = starter.getStringExtra(KEY_USER_ID);
         mUserName = starter.getStringExtra(KEY_USER_NAME);
         mUserAvatar = starter.getStringExtra(KEY_USER_AVATAR);

@@ -4,12 +4,17 @@ import static com.tencent.trtc.TRTCCloudDef.TRTC_AUDIO_QUALITY_SPEECH;
 
 import android.content.Context;
 import android.text.TextUtils;
+import android.util.Log;
 
+import com.tencent.liteav.basic.UserModel;
+import com.tencent.liteav.basic.UserModelManager;
+import com.tencent.liteav.tuiroom.model.TUIRoomCore;
 import com.tencent.liteav.tuiroom.model.TUIRoomCoreDef;
 import com.tencent.liteav.tuiroom.model.impl.TUIRoomCoreImpl;
 import com.tencent.liteav.tuiroom.model.impl.base.TRTCLogger;
 import com.tencent.liteav.tuiroom.ui.RoomMainActivity;
 import com.tencent.qcloud.tuicore.TUILogin;
+import com.tencent.tuikit.engine.room.TUIRoomEngineDef;
 
 public class TUIRoomImpl extends TUIRoom {
     private static final String TAG = "TUIRoomImpl";
@@ -38,9 +43,11 @@ public class TUIRoomImpl extends TUIRoom {
     }
 
     @Override
-    public void createRoom(int roomId, TUIRoomCoreDef.SpeechMode speechMode, boolean isOpenCamera,
+    public void createRoom(int roomId, TUIRoomEngineDef.SpeechMode speechMode, boolean isOpenCamera,
                            boolean isOpenMicrophone) {
+        Log.e("AAAAA", "TUIRoomImpl createRoom");
         if (mContext == null) {
+            Log.e("AAAAA", "TUIRoomImpl createRoom 1");
             TRTCLogger.e(TAG, "context is null");
             if (mListener != null) {
                 mListener.onRoomCreate(-1, "context is null");
@@ -49,27 +56,34 @@ public class TUIRoomImpl extends TUIRoom {
         }
 
         if (roomId == 0) {
+            Log.e("AAAAA", "TUIRoomImpl createRoom 2");
             TRTCLogger.e(TAG, "roomId is empty");
             if (mListener != null) {
                 mListener.onRoomCreate(-1, "roomId is empty");
             }
             return;
         }
-
-        if (!TUILogin.isUserLogined()) {
+         // todo
+/*        if (!TUILogin.isUserLogined()) {
+            Log.e("AAAAA", "TUIRoomImpl createRoom 3");
             TRTCLogger.e(TAG, "user not login");
             if (mListener != null) {
                 mListener.onRoomCreate(-1, "user not login");
             }
             return;
-        }
+        }*/
 
         if (speechMode == null) {
-            speechMode = TUIRoomCoreDef.SpeechMode.FREE_SPEECH;
+            Log.e("AAAAA", "TUIRoomImpl createRoom 4");
+            speechMode = TUIRoomEngineDef.SpeechMode.APPLY;
         }
-        String userId = TUILogin.getUserId();
-        String userName = TUILogin.getNickName();
-        String userAvatar = TUILogin.getFaceUrl();
+
+        final UserModelManager manager = UserModelManager.getInstance();
+        final UserModel userModel = manager.getUserModel();
+
+        String userId = userModel.userId;
+        String userName = userModel.userName;
+        String userAvatar = userModel.userAvatar;
         RoomMainActivity.enterRoom(mContext, true, roomId, speechMode, userId, userName, userAvatar,
                 isOpenCamera, isOpenMicrophone, TRTC_AUDIO_QUALITY_SPEECH, VIDEO_QUALITY_HD);
     }

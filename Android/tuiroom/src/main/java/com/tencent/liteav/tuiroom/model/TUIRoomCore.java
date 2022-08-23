@@ -6,6 +6,7 @@ import com.tencent.liteav.beauty.TXBeautyManager;
 import com.tencent.liteav.tuiroom.model.impl.TUIRoomCoreImpl;
 import com.tencent.rtmp.ui.TXCloudVideoView;
 import com.tencent.trtc.TRTCCloudDef;
+import com.tencent.tuikit.engine.room.TUIRoomEngineDef;
 
 import java.util.List;
 
@@ -43,7 +44,7 @@ public abstract class TUIRoomCore {
      *                   TUIRoomDef.SpeechMode.APPLY_SPEECH: Users need permission to speak.
      * @param callback   Callback for room creation result. The `code` will be 0 if the operation succeeds.
      */
-    public abstract void createRoom(int roomId, TUIRoomCoreDef.SpeechMode speechMode,
+    public abstract void createRoom(int roomId, TUIRoomEngineDef.SpeechMode speechMode,
                                     TUIRoomCoreCallback.ActionCallback callback);
 
     /**

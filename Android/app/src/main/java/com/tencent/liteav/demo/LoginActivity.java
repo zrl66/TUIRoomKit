@@ -25,7 +25,12 @@ import com.tencent.liteav.basic.AvatarConstant;
 import com.tencent.liteav.basic.UserModel;
 import com.tencent.liteav.basic.UserModelManager;
 import com.tencent.liteav.debug.GenerateGlobalConfig;
+import com.tencent.liteav.tuiroom.model.TUIRoomCore;
+import com.tencent.liteav.tuiroom.model.TUIRoomCoreCallback;
+import com.tencent.liteav.tuiroom.model.TUIRoomCoreDef;
 import com.tencent.qcloud.tuicore.TUILogin;
+import com.tencent.tuikit.engine.room.TUIRoomEngine;
+import com.tencent.tuikit.engine.room.TUIRoomEngineDef;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -55,6 +60,7 @@ public class LoginActivity extends AppCompatActivity {
         mButtonLogin.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                Log.e("AAAAA", "onClick login");
                 login();
             }
         });
@@ -71,7 +77,23 @@ public class LoginActivity extends AppCompatActivity {
         userModel.userSig = GenerateGlobalConfig.genTestUserSig(userId);
         final UserModelManager manager = UserModelManager.getInstance();
         manager.setUserModel(userModel);
-        V2TIMSDKConfig config = new V2TIMSDKConfig();
+
+        TUIRoomEngine.init(GenerateGlobalConfig.SDKAPPID, userModel.userId, userModel.userSig,
+                new TUIRoomEngineDef.ActionCallback() {
+                    @Override
+                    public void onSuccess() {
+                        Log.e("AAAAA", "TUIRoomEngine.init onSuccess");
+                        getUserInfo();
+                    }
+
+                    @Override
+                    public void onError(int i, String s) {
+                        Log.e("AAAAA", "TUIRoomEngine.init onError : " + i + "  s : " + s);
+                    }
+                });
+        Log.e("AAAAA", "TUIRoomEngine.init");
+
+/*        V2TIMSDKConfig config = new V2TIMSDKConfig();
         config.setLogLevel(V2TIMSDKConfig.V2TIM_LOG_DEBUG);
         TUILogin.init(this, GenerateGlobalConfig.SDKAPPID, null, new V2TIMSDKListener() {
 
@@ -97,7 +119,7 @@ public class LoginActivity extends AppCompatActivity {
                 Log.d(TAG, "login onSuccess");
                 getUserInfo();
             }
-        });
+        });*/
     }
 
     private void getUserInfo() {
@@ -106,6 +128,54 @@ public class LoginActivity extends AppCompatActivity {
         List<String> userIdList = new ArrayList<>();
         userIdList.add(userModel.userId);
         Log.d(TAG, "setUserInfo: userIdList = " + userIdList);
+
+        String userName = "6666";
+        String userAvatar = "77777";
+        Log.d(TAG, "onSuccess: userName = " + userName + " , userAvatar = " + userAvatar);
+        Log.e("AAAAA", "onSuccess: userName = " + userName + " , userAvatar = " + userAvatar);
+        if (TextUtils.isEmpty(userName) || TextUtils.isEmpty(userAvatar)) {
+            Intent intent = new Intent(LoginActivity.this, ProfileActivity.class);
+            startActivity(intent);
+        } else {
+            userModel.userAvatar = userAvatar;
+            userModel.userName = userName;
+            manager.setUserModel(userModel);
+            Intent intent = new Intent(LoginActivity.this, MainActivity.class);
+            startActivity(intent);
+        }
+        finish();
+
+
+/*        TUIRoomCore.getInstance(this).getUserInfo(userModel.userId, new TUIRoomCoreCallback.UserInfoCallback() {
+            @Override
+            public void onCallback(int code, String msg, TUIRoomCoreDef.UserInfo userInfo) {
+                if (code != 0) {
+                    Log.e("AAAAA", "getUserInfo onCallback code : " + code);
+                    return;
+                }
+                if (userInfo == null) {
+                    Log.e("AAAAA", "getUserInfo onCallback userInfo is null");
+                    return;
+                }
+                String userName = userInfo.userName;
+                String userAvatar = userInfo.userAvatar;
+                Log.d(TAG, "onSuccess: userName = " + userName + " , userAvatar = " + userAvatar);
+                Log.e("AAAAA", "onSuccess: userName = " + userName + " , userAvatar = " + userAvatar);
+                if (TextUtils.isEmpty(userName) || TextUtils.isEmpty(userAvatar)) {
+                    Intent intent = new Intent(LoginActivity.this, ProfileActivity.class);
+                    startActivity(intent);
+                } else {
+                    userModel.userAvatar = userAvatar;
+                    userModel.userName = userName;
+                    manager.setUserModel(userModel);
+                    Intent intent = new Intent(LoginActivity.this, MainActivity.class);
+                    startActivity(intent);
+                }
+                finish();
+            }
+        });*/
+
+/*
         V2TIMManager.getInstance().getUsersInfo(userIdList, new V2TIMValueCallback<List<V2TIMUserFullInfo>>() {
 
             @Override
@@ -134,7 +204,7 @@ public class LoginActivity extends AppCompatActivity {
                 }
                 finish();
             }
-        });
+        });*/
     }
 
     private void initStatusBar() {

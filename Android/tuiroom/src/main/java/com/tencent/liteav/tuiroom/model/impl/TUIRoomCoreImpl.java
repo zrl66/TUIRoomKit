@@ -4,19 +4,22 @@ import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.TextUtils;
+import android.util.Log;
 
+import com.tencent.liteav.basic.UserModel;
+import com.tencent.liteav.basic.UserModelManager;
 import com.tencent.liteav.beauty.TXBeautyManager;
+import com.tencent.liteav.debug.GenerateGlobalConfig;
 import com.tencent.liteav.tuiroom.model.TUIRoomCore;
 import com.tencent.liteav.tuiroom.model.TUIRoomCoreCallback;
 import com.tencent.liteav.tuiroom.model.TUIRoomCoreDef;
 import com.tencent.liteav.tuiroom.model.TUIRoomCoreListener;
 import com.tencent.liteav.tuiroom.model.impl.base.GroupNotificationData;
+import com.tencent.liteav.tuiroom.model.impl.base.SignallingConstant;
 import com.tencent.liteav.tuiroom.model.impl.base.TRTCLogger;
 import com.tencent.liteav.tuiroom.model.impl.base.TXUserInfo;
-import com.tencent.liteav.tuiroom.model.impl.base.TXUserInfoCallback;
-import com.tencent.liteav.tuiroom.model.impl.im.ImServiceListener;
 import com.tencent.liteav.tuiroom.model.impl.im.IMService;
-import com.tencent.liteav.tuiroom.model.impl.base.SignallingConstant;
+import com.tencent.liteav.tuiroom.model.impl.im.ImServiceListener;
 import com.tencent.liteav.tuiroom.model.impl.trtc.TRTCService;
 import com.tencent.liteav.tuiroom.model.impl.trtc.TXTRTCRoomListener;
 import com.tencent.qcloud.tuicore.TUILogin;
@@ -24,6 +27,8 @@ import com.tencent.rtmp.ui.TXCloudVideoView;
 import com.tencent.trtc.TRTCCloud;
 import com.tencent.trtc.TRTCCloudDef;
 import com.tencent.trtc.TRTCStatistics;
+import com.tencent.tuikit.engine.room.TUIRoomEngine;
+import com.tencent.tuikit.engine.room.TUIRoomEngineDef;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -42,8 +47,8 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
     private static TUIRoomCoreImpl     sInstance;
     private        TUIRoomCoreListener mTUIRoomCoreListener;
     private        Handler             mMainHandler;
-    private        IMService           mIMService;
-    private        TRTCService         mTRTCService;
+    private        TUIRoomEngine       mTUIRoomEngine;
+    private        TRTCCloud           mTRTCCloud;
 
     private Set<String>                          mAnchorList;
     private List<TUIRoomCoreDef.UserInfo>        mUserInfoList;
@@ -57,11 +62,13 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
     private boolean                   mIsMutedCameraByMaster;
     private boolean                   mIsMutedMicByMaster;
 
+    private TUIRoomEngineDef.RoomInfo mRoomInfo;
+
     private TUIRoomCoreImpl(Context context) {
-        mIMService = new IMService(context);
-        mTRTCService = new TRTCService(context);
-        mIMService.setListener(this);
-        mTRTCService.setListener(this);
+        mTRTCCloud = TRTCCloud.sharedInstance(context);
+        mTUIRoomEngine = TUIRoomEngine.createInstance(context);
+        Log.e("AAAAA", "TUIRoomEngine.createInstance");
+
         mMainHandler = new Handler(Looper.getMainLooper());
         mUserInfoMap = new HashMap<>();
         mAnchorList = new HashSet<>();
@@ -93,30 +100,87 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
     }
 
     @Override
-    public void createRoom(final int roomId, final TUIRoomCoreDef.SpeechMode speechMode,
+    public void createRoom(final int roomId, final TUIRoomEngineDef.SpeechMode speechMode,
                            final TUIRoomCoreCallback.ActionCallback callback) {
+        Log.e(TAG, "createRoom");
         runOnMainThread(new Runnable() {
             @Override
             public void run() {
-                final int sdkAppId = TUILogin.getSdkAppId();
-                final String userId = TUILogin.getUserId();
-                final String userSig = TUILogin.getUserSig();
-                TRTCLogger.i(TAG, "createRoom room, app id:" + sdkAppId + " room id:" + roomId + " user id:"
-                        + userId + " userSig is empty:" + TextUtils.isEmpty(userSig));
-                if (!TUILogin.isUserLogined()) {
+                Log.e("AAAAA", "TUIRoomCoreImpl createRoom");
+/*                if (!TUILogin.isUserLogined()) {
+                    Log.e("AAAAA", "TUIRoomCoreImpl not login");
                     TRTCLogger.e(TAG, "failed, you must login first");
                     if (callback != null) {
                         callback.onCallback(CODE_ERROR, "failed, you must login first");
                     }
                     return;
-                }
+                }*/
                 if (roomId == 0) {
+                    Log.e("AAAAA", "TUIRoomCoreImpl roomId is 0");
                     TRTCLogger.i(TAG, "enterRoom, roomId: " + roomId);
                     callback.onCallback(CODE_ERROR, "room id is empty");
                     return;
                 }
                 clear();
-                mSelfUserId = userId;
+                mRoomInfo = new TUIRoomEngineDef.RoomInfo();
+                final TUIRoomEngineDef.RoomIdInfo roomIdInfo = new TUIRoomEngineDef.RoomIdInfo();
+                roomIdInfo.roomId = roomId;
+                roomIdInfo.stringRoomId = roomId + "";
+                roomIdInfo.isUseStringRoomId = false;
+                mRoomInfo.roomIdInfo = roomIdInfo;
+                mRoomInfo.roomType = TUIRoomEngineDef.RoomType.GROUP;
+                mRoomInfo.speechMode = speechMode; // TUIRoomEngineDef.SpeechMode.APPLY;
+
+                final UserModelManager manager = UserModelManager.getInstance();
+                final UserModel userModel = manager.getUserModel();
+
+                mRoomInfo.owner = userModel.userId;
+                mRoomInfo.name = userModel.userName;
+                mRoomInfo.createTime = System.currentTimeMillis();
+                mRoomInfo.roomMemberCount = 1;
+                mRoomInfo.maxSeatCount = 8;
+                mRoomInfo.enableVideo = true;
+                mRoomInfo.enableAudio = true;
+                mRoomInfo.enableMessage = true;
+
+                Log.e("AAAAA", "TUIRoomEngine.createRoom b");
+                mTUIRoomEngine.createRoom(mRoomInfo, new TUIRoomEngineDef.ActionCallback() {
+                    @Override
+                    public void onSuccess() {
+                        Log.e("AAAAA", "TUIRoomEngine.createRoom onSuccess");
+                        Log.e(TAG, "createRoom onSuccess");
+                        initUserInfoList();
+                        initGroupNotification();
+                        mTUIRoomEngine.enterRoom(mRoomInfo.roomIdInfo, new TUIRoomEngineDef.ActionCallback() {
+                            @Override
+                            public void onSuccess() {
+                                Log.e("AAAAA", "TUIRoomEngine.enterRoom onSuccess");
+                                if (callback != null) {
+                                    callback.onCallback(0, "");
+                                }
+                            }
+
+                            @Override
+                            public void onError(int i, String s) {
+                                Log.e("AAAAA", "TUIRoomEngine.enterRoom onError");
+                                if (callback != null) {
+                                    callback.onCallback(i, s);
+                                }
+                            }
+                        });
+
+                    }
+
+                    @Override
+                    public void onError(int i, String s) {
+                        Log.e("AAAAA", "TUIRoomEngine.createRoom onError i : " + i + "    s : " + s);
+                        Log.e(TAG, "createRoom onError");
+                        if (callback != null) {
+                            callback.onCallback(i, s);
+                        }
+                    }
+                });
+/*
                 mIMService.createRoom(String.valueOf(roomId), speechMode, String.valueOf(roomId),
                         new TUIRoomCoreCallback.ActionCallback() {
                             @Override
@@ -142,7 +206,7 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
                                     }
                                 }
                             }
-                        });
+                        });*/
             }
         });
     }
@@ -153,9 +217,53 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
             @Override
             public void run() {
                 TRTCLogger.i(TAG, "destroyRoom");
-                if (!mIMService.isOwner()) {
+/*                if (mTUIRoomEngine.getUserInfo()){
                     TRTCLogger.e(TAG, "you are not the room owner");
-                    callback.onCallback(CODE_ERROR, "you are not the room owner");
+                    if (callback != null) {
+                        callback.onCallback(CODE_ERROR, "you are not the room owner");
+                    }
+                    return;
+                }*/
+                mTUIRoomEngine.exitRoomAsync(new TUIRoomEngineDef.ActionCallback() {
+                    @Override
+                    public void onSuccess() {
+                        mTUIRoomEngine.destroyRoom(new TUIRoomEngineDef.ActionCallback() {
+                            @Override
+                            public void onSuccess() {
+                                clear();
+                                if (callback != null) {
+                                    callback.onCallback(0, "");
+                                }
+                            }
+
+                            @Override
+                            public void onError(int i, String s) {
+                                if (mTUIRoomCoreListener != null) {
+                                    mTUIRoomCoreListener.onError(i, s);
+                                }
+                                if (callback != null) {
+                                    callback.onCallback(i, s);
+                                }
+                            }
+                        });
+                    }
+
+                    @Override
+                    public void onError(int i, String s) {
+                        if (mTUIRoomCoreListener != null) {
+                            mTUIRoomCoreListener.onError(i, s);
+                        }
+                        if (callback != null) {
+                            callback.onCallback(i, s);
+                        }
+                    }
+                });
+
+        /*        if (!mIMService.isOwner()) {
+                    TRTCLogger.e(TAG, "you are not the room owner");
+                    if (callback != null) {
+                        callback.onCallback(CODE_ERROR, "you are not the room owner");
+                    }
                     return;
                 }
                 mTRTCService.exitRoom(new TUIRoomCoreCallback.ActionCallback() {
@@ -185,7 +293,7 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
                             }
                         });
                     }
-                });
+                });*/
             }
         });
     }
@@ -206,7 +314,28 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
                 clear();
                 final String userId = TUILogin.getUserId();
                 mSelfUserId = userId;
-                mIMService.enterRoom(String.valueOf(roomId), new TUIRoomCoreCallback.ActionCallback() {
+
+                TUIRoomEngineDef.RoomIdInfo roomIdInfo = new TUIRoomEngineDef.RoomIdInfo();
+                roomIdInfo.roomId = roomId;
+                mTUIRoomEngine.enterRoom(roomIdInfo, new TUIRoomEngineDef.ActionCallback() {
+                    @Override
+                    public void onSuccess() {
+                        initUserInfoList();
+                        initGroupNotification();
+                        if (callback != null) {
+                            callback.onCallback(0, null);
+                        }
+                    }
+
+                    @Override
+                    public void onError(int i, String s) {
+                        if (callback != null) {
+                            callback.onCallback(i, s);
+                        }
+                    }
+                });
+
+                /*mIMService.enterRoom(String.valueOf(roomId), new TUIRoomCoreCallback.ActionCallback() {
                     @Override
                     public void onCallback(int code, String msg) {
                         if (code == CODE_SUCCESS) {
@@ -233,7 +362,7 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
                             callback.onCallback(code, msg);
                         }
                     }
-                });
+                });*/
             }
         });
     }
@@ -244,7 +373,28 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
             @Override
             public void run() {
                 TRTCLogger.i(TAG, "leaveRoom");
-                if (mIMService.isOwner()) {
+
+                mTUIRoomEngine.exitRoomAsync(new TUIRoomEngineDef.ActionCallback() {
+                    @Override
+                    public void onSuccess() {
+                        clear();
+                        if (callback != null) {
+                            callback.onCallback(0, null);
+                        }
+                    }
+
+                    @Override
+                    public void onError(int i, String s) {
+                        if (mTUIRoomCoreListener != null) {
+                            mTUIRoomCoreListener.onError(i, s);
+                        }
+                        if (callback != null) {
+                            callback.onCallback(i, s);
+                        }
+                    }
+                });
+
+/*                if (mIMService.isOwner()) {
                     TRTCLogger.e(TAG, "you are the room owner, you should call destroyRoom");
                     if (callback != null) {
                         callback.onCallback(CODE_ERROR, "you are the room owner, you should call destroyRoom");
@@ -273,7 +423,7 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
                             }
                         }
                     }
-                });
+                });*/
             }
         });
     }
@@ -281,7 +431,35 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
     @Override
     public TUIRoomCoreDef.RoomInfo getRoomInfo() {
         TRTCLogger.i(TAG, "getRoomInfo");
-        return mIMService.getRoomInfo();
+        final TUIRoomCoreDef.RoomInfo info = new TUIRoomCoreDef.RoomInfo();
+        final Object wait = new Object();
+
+        // todo 这里估计有 bug
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                mTUIRoomEngine.getRoomInfo(new TUIRoomEngineDef.GetRoomInfoCallback() {
+                    @Override
+                    public void onSuccess(TUIRoomEngineDef.RoomInfo roomInfo) {
+                        info.roomId = roomInfo.roomIdInfo.stringRoomId;
+                        Log.e("AAAAA", "getRoomInfo onSuccess : " + roomInfo.toString());
+                        wait.notify();
+                    }
+
+                    @Override
+                    public void onError(int i, String s) {
+                        Log.e("AAAAA", "getRoomInfo onError : " + i);
+                    }
+                });
+            }
+        }).start();
+        try {
+            wait.wait();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        return info;
+        //   return mIMService.getRoomInfo();
     }
 
     @Override
@@ -297,11 +475,39 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
             public void run() {
                 TRTCLogger.i(TAG, "getUserInfo userId: " + userId);
                 TUIRoomCoreDef.UserInfo userInfo = mUserInfoMap.get(userId);
+                Log.e("AAAAA", "TUIRoomCoreImpl getUserInfo userInfo : " + userInfo);
                 if (userInfo != null) {
                     TRTCLogger.i(TAG, "getUserInfo : " + userInfo);
                     callback.onCallback(CODE_SUCCESS, "", userInfo);
                 } else {
-                    mIMService.getUserInfo(userId, new TXUserInfoCallback() {
+                    mTUIRoomEngine.getUserInfo(userId, new TUIRoomEngineDef.GetUserInfoCallback() {
+                        @Override
+                        public void onSuccess(TUIRoomEngineDef.UserInfo userInfo) {
+                            Log.e("AAAAA", "TUIRoomCoreImpl getUserInfo TUIRoomEngine.getUserInfo onSuccess");
+                            TUIRoomCoreDef.UserInfo tuiUserInfo = new TUIRoomCoreDef.UserInfo();
+                            tuiUserInfo.userId = userInfo.userId;
+                            tuiUserInfo.userName = userInfo.userName;
+                            tuiUserInfo.userAvatar = userInfo.avatarUrl;
+                            // todo 这里再确认一下
+                            tuiUserInfo.role = userInfo.role == 0 ? TUIRoomCoreDef.Role.MASTER :
+                                    userInfo.role == 1 ? TUIRoomCoreDef.Role.MANAGER : TUIRoomCoreDef.Role.AUDIENCE;
+                            TRTCLogger.i(TAG, "getUserInfo : " + userInfo);
+                            mUserInfoList.add(tuiUserInfo);
+                            mUserInfoMap.put(userInfo.userId, tuiUserInfo);
+                            if (callback != null) {
+                                callback.onCallback(0, null, tuiUserInfo);
+                            }
+                        }
+
+                        @Override
+                        public void onError(int i, String s) {
+                            Log.e("AAAAA", "TUIRoomCoreImpl getUserInfo TUIRoomEngine.getUserInfo onError : " + i);
+                            if (callback != null) {
+                                callback.onCallback(i, s, null);
+                            }
+                        }
+                    });
+/*                    mIMService.getUserInfo(userId, new TXUserInfoCallback() {
                         @Override
                         public void onCallback(int code, String msg, final TXUserInfo userInfo) {
                             runOnMainThread(new Runnable() {
@@ -322,7 +528,7 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
                                 }
                             });
                         }
-                    });
+                    });*/
                 }
             }
         });
@@ -335,7 +541,8 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
             @Override
             public void run() {
                 TRTCLogger.i(TAG, "setSelfProfile userName: " + userName + "avatarURL: " + avatarURL);
-                mIMService.setSelfProfile(userName, avatarURL, callback);
+                // todo 对应什么接口
+            //    mIMService.setSelfProfile(userName, avatarURL, callback);
             }
         });
     }
@@ -346,17 +553,30 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
             @Override
             public void run() {
                 TRTCLogger.i(TAG, "transferRoomMaster userId: " + userId);
-                mIMService.transferRoomMaster(callback);
+                // todo 什么参数
+                mTUIRoomEngine.changeUserRole(userId, 0, new TUIRoomEngineDef.ActionCallback() {
+                    @Override
+                    public void onSuccess() {
+                        callback.onCallback(0, null);
+                    }
+
+                    @Override
+                    public void onError(int i, String s) {
+                        callback.onCallback(i, s);
+                    }
+                });
+                //    mIMService.transferRoomMaster(callback);
             }
         });
     }
 
     @Override
     public void startCameraPreview(final boolean isFront, final TXCloudVideoView view) {
-        TRTCLogger.i(TAG, "startCameraPreview isFront: " + isFront + " mIsMutedMicByMaster: "
-                + mIsMutedCameraByMaster);
+        TRTCLogger.i(TAG, "startCameraPreview isFront: " + isFront + " mIsMutedMicByMaster: " + mIsMutedCameraByMaster);
         mIsUseFrontCamera = isFront;
-        mTRTCService.startCameraPreview(isFront, view, null);
+        mTUIRoomEngine.setRenderView(null, 0, view);
+        mTUIRoomEngine.openLocalCamera(1, null);
+    //    mTRTCService.startCameraPreview(isFront, view, null);  // todo 怎么替换？
     }
 
     @Override
@@ -365,7 +585,8 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
             @Override
             public void run() {
                 TRTCLogger.i(TAG, "stopCameraPreview");
-                mTRTCService.stopCameraPreview();
+                mTUIRoomEngine.closeLocalCamera();
+                //     mTRTCService.stopCameraPreview();
             }
         });
     }
@@ -376,17 +597,22 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
             @Override
             public void run() {
                 TRTCLogger.i(TAG, "setLocalViewMirror type: " + type);
-                mTRTCService.setLocalViewMirror(type);
+                mTRTCCloud.setLocalViewMirror(type);
+                //      mTRTCService.setLocalViewMirror(type);
+                //
             }
         });
     }
 
     @Override
     public void startLocalAudio(final int quality) {
-        TRTCLogger.i(TAG, "startLocalAudio quality: " + quality + " mIsMutedMicByMaster: "
-                + mIsMutedMicByMaster);
-        mTRTCService.setAudioQuality(quality);
-        mTRTCService.startMicrophone();
+        TRTCLogger.i(TAG, "startLocalAudio quality: " + quality + " mIsMutedMicByMaster: " + mIsMutedMicByMaster);
+        TUIRoomEngineDef.AudioProfile audioProfile = quality == 0 ? TUIRoomEngineDef.AudioProfile.SPEECH :
+                quality == 1 ? TUIRoomEngineDef.AudioProfile.DEFAULT : TUIRoomEngineDef.AudioProfile.MUSIC;
+        mTUIRoomEngine.setAudioProfile(audioProfile);
+        //    mTRTCService.setAudioQuality(quality);
+        mTUIRoomEngine.openLocalMicrophone(null);
+        //   mTRTCService.startMicrophone();
     }
 
     @Override
@@ -395,7 +621,8 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
             @Override
             public void run() {
                 TRTCLogger.i(TAG, "stopLocalAudio");
-                mTRTCService.stopMicrophone();
+                mTUIRoomEngine.closeLocalMicrophone();
+                //     mTRTCService.stopMicrophone();
             }
         });
     }
@@ -406,7 +633,9 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
             @Override
             public void run() {
                 TRTCLogger.i(TAG, "setSpeaker useSpeaker: " + useSpeaker);
-                mTRTCService.setSpeaker(useSpeaker);
+                mTRTCCloud.setAudioRoute(
+                        useSpeaker ? TRTCCloudDef.TRTC_AUDIO_ROUTE_SPEAKER : TRTCCloudDef.TRTC_AUDIO_ROUTE_EARPIECE);
+                //    mTRTCService.setSpeaker(useSpeaker);
             }
         });
     }
@@ -424,9 +653,13 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
                     return;
                 }
                 if (steamType == TUIRoomCoreDef.SteamType.SCREE) {
-                    mTRTCService.startPlaySubStream(userId, view, callback);
+
+                    TRTCLogger.i(TAG, "start play user sub stream id:" + userId + " view:" + view);
+                    mTUIRoomEngine.startPlayRemoteVideoStream(userId, TRTCCloudDef.TRTC_VIDEO_STREAM_TYPE_SUB, null);
+                    //    mTRTCService.startPlaySubStream(userId, view, callback);
                 } else {
-                    mTRTCService.startPlay(userId, view, callback);
+                    mTUIRoomEngine.startPlayRemoteVideoStream(userId, TRTCCloudDef.TRTC_VIDEO_STREAM_TYPE_BIG, null);
+                    //     mTRTCService.startPlay(userId, view, callback);
                 }
 
             }
@@ -441,9 +674,11 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
             public void run() {
                 TRTCLogger.i(TAG, "stopRemoteView userId: " + userId + " steamType:" + steamType);
                 if (steamType == TUIRoomCoreDef.SteamType.SCREE) {
-                    mTRTCService.stopPlaySubStream(userId, callback);
+                    mTUIRoomEngine.stopPlayRemoteVideoStream(userId, TRTCCloudDef.TRTC_VIDEO_STREAM_TYPE_SUB);
+                    //    mTRTCService.stopPlaySubStream(userId, callback);
                 } else {
-                    mTRTCService.stopPlay(userId, callback);
+                    mTUIRoomEngine.stopPlayRemoteVideoStream(userId, TRTCCloudDef.TRTC_VIDEO_STREAM_TYPE_BIG);
+                    //    mTRTCService.stopPlay(userId, callback);
                 }
             }
         });
@@ -457,7 +692,8 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
                 TRTCLogger.i(TAG, "switchCamera isFront: " + isFront);
                 if (isFront != mIsUseFrontCamera) {
                     mIsUseFrontCamera = isFront;
-                    mTRTCService.switchCamera();
+                    mTRTCCloud.getDeviceManager().switchCamera(isFront);
+                    //    mTRTCService.switchCamera();
                 }
             }
         });
@@ -475,7 +711,18 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
                     }
                     return;
                 }
-                mIMService.sendRoomTextMsg(message, callback);
+                mTUIRoomEngine.sendTextMessage(message, new TUIRoomEngineDef.ActionCallback() {
+                    @Override
+                    public void onSuccess() {
+                        callback.onCallback(0, null);
+                    }
+
+                    @Override
+                    public void onError(int i, String s) {
+                        callback.onCallback(i, s);
+                    }
+                });
+                //     mIMService.sendRoomTextMsg(message, callback);
             }
         });
     }
@@ -486,7 +733,18 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
             @Override
             public void run() {
                 TRTCLogger.i(TAG, "sendCustomMessage");
-                mIMService.sendRoomCustomMsg(data, callback);
+                mTUIRoomEngine.sendCustomMessage(data, "", new TUIRoomEngineDef.ActionCallback() {
+                    @Override
+                    public void onSuccess() {
+                        callback.onCallback(0, null);
+                    }
+
+                    @Override
+                    public void onError(int i, String s) {
+                        callback.onCallback(i, s);
+                    }
+                });
+                //   mIMService.sendRoomCustomMsg(data, callback);
             }
         });
     }
@@ -498,7 +756,18 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
             @Override
             public void run() {
                 TRTCLogger.i(TAG, "muteUserMicrophone userId: " + userId + " mute: " + mute);
-                mIMService.muteUserMicrophone(userId, mute, callback);
+                mTUIRoomEngine.muteRemoteUser(userId, 0, new TUIRoomEngineDef.ActionCallback() {
+                    @Override
+                    public void onSuccess() {
+                        callback.onCallback(0, null);
+                    }
+
+                    @Override
+                    public void onError(int i, String s) {
+                        callback.onCallback(i, s);
+                    }
+                });
+                //   mIMService.muteUserMicrophone(userId, mute, callback);
             }
         });
     }
@@ -509,21 +778,26 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
             @Override
             public void run() {
                 TRTCLogger.i(TAG, "muteAllUsersMicrophone mute: " + mute);
-                mIMService.muteAllUsersMicrophone(mute, callback);
+                mTUIRoomEngine.getRoomInfo(new TUIRoomEngineDef.GetRoomInfoCallback() {
+                    @Override
+                    public void onSuccess(TUIRoomEngineDef.RoomInfo roomInfo) {
+                        roomInfo.enableAudio = false;
+                        mTUIRoomEngine.updateRoomInfo(roomInfo, null);
+                    }
+
+                    @Override
+                    public void onError(int i, String s) {
+
+                    }
+                });
+                //        mIMService.muteAllUsersMicrophone(mute, callback);
             }
         });
     }
 
     @Override
-    public void muteUserCamera(final String userId, final boolean mute,
-                               final TUIRoomCoreCallback.ActionCallback callback) {
-        runOnMainThread(new Runnable() {
-            @Override
-            public void run() {
-                TRTCLogger.i(TAG, "muteUserCamera userId: " + userId + " mute: " + mute);
-                mIMService.muteUserCamera(userId, mute, callback);
-            }
-        });
+    public void muteUserCamera(String userId, boolean mute, TUIRoomCoreCallback.ActionCallback callback) {
+
     }
 
     @Override
@@ -532,7 +806,29 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
             @Override
             public void run() {
                 TRTCLogger.i(TAG, "muteAllUsersCamera mute: " + mute);
-                mIMService.muteAllUsersCamera(mute, callback);
+                mTUIRoomEngine.getRoomInfo(new TUIRoomEngineDef.GetRoomInfoCallback() {
+                    @Override
+                    public void onSuccess(TUIRoomEngineDef.RoomInfo roomInfo) {
+                        roomInfo.enableVideo = false;
+                        mTUIRoomEngine.updateRoomInfo(roomInfo, new TUIRoomEngineDef.ActionCallback() {
+                            @Override
+                            public void onSuccess() {
+                                callback.onCallback(0, null);
+                            }
+
+                            @Override
+                            public void onError(int i, String s) {
+                                callback.onCallback(i, s);
+                            }
+                        });
+                    }
+
+                    @Override
+                    public void onError(int i, String s) {
+                        callback.onCallback(i, s);
+                    }
+                });
+                //    mIMService.muteAllUsersCamera(mute, callback);
             }
         });
     }
@@ -543,20 +839,36 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
             @Override
             public void run() {
                 TRTCLogger.i(TAG, "muteChatRoom mute: " + mute);
-                mIMService.muteChatRoom(mute, callback);
+                mTUIRoomEngine.getRoomInfo(new TUIRoomEngineDef.GetRoomInfoCallback() {
+                    @Override
+                    public void onSuccess(TUIRoomEngineDef.RoomInfo roomInfo) {
+                        roomInfo.enableAudio = false;
+                        mTUIRoomEngine.updateRoomInfo(roomInfo, new TUIRoomEngineDef.ActionCallback() {
+                            @Override
+                            public void onSuccess() {
+                                callback.onCallback(0, null);
+                            }
+
+                            @Override
+                            public void onError(int i, String s) {
+                                callback.onCallback(i, s);
+                            }
+                        });
+                    }
+
+                    @Override
+                    public void onError(int i, String s) {
+                        callback.onCallback(i, s);
+                    }
+                });
+                //    mIMService.muteChatRoom(mute, callback);
             }
         });
     }
 
     @Override
-    public void kickOffUser(final String userId, final TUIRoomCoreCallback.ActionCallback callback) {
-        runOnMainThread(new Runnable() {
-            @Override
-            public void run() {
-                TRTCLogger.i(TAG, "kickOffUser userId: " + userId);
-                mIMService.kickOffUser(userId, callback);
-            }
-        });
+    public void kickOffUser(String userId, TUIRoomCoreCallback.ActionCallback callback) {
+
     }
 
     @Override
@@ -565,7 +877,8 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
             @Override
             public void run() {
                 TRTCLogger.i(TAG, "startCallingRoll");
-                mIMService.setCallingRoll(true, callback);
+                // todo 找不到 setCallingRoll
+         //       mIMService.setCallingRoll(true, callback);
             }
         });
     }
@@ -576,7 +889,8 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
             @Override
             public void run() {
                 TRTCLogger.i(TAG, "stopCallingRoll");
-                mIMService.setCallingRoll(false, callback);
+                // todo 找不到 setCallingRoll
+           //     mIMService.setCallingRoll(false, callback);
             }
         });
     }
@@ -587,7 +901,8 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
             @Override
             public void run() {
                 TRTCLogger.i(TAG, "replyCallingRoll");
-                mIMService.replyCallingRoll(callback);
+                // todo 找不到 replyCallingRoll
+           //     mIMService.replyCallingRoll(callback);
             }
         });
     }
@@ -598,7 +913,8 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
             @Override
             public void run() {
                 TRTCLogger.i(TAG, "sendSpeechInvitation userId: " + userId);
-                mIMService.sendSpeechInvitation(userId, callback);
+                // todo 找不到 sendSpeechInvitation
+        //        mIMService.sendSpeechInvitation(userId, callback);
             }
         });
     }
@@ -609,7 +925,8 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
             @Override
             public void run() {
                 TRTCLogger.i(TAG, "cancelSpeechInvitation userId: " + userId);
-                mIMService.cancelSpeechInvitation(userId, callback);
+                // todo 找不到 cancelSpeechInvitation
+         //       mIMService.cancelSpeechInvitation(userId, callback);
             }
         });
     }
@@ -620,7 +937,8 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
             @Override
             public void run() {
                 TRTCLogger.i(TAG, "replySpeechInvitation agree: " + agree);
-                mIMService.replySpeechInvitation(agree, callback);
+                // todo 找不到 replySpeechInvitation
+         //       mIMService.replySpeechInvitation(agree, callback);
             }
         });
     }
@@ -630,13 +948,13 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
         runOnMainThread(new Runnable() {
             @Override
             public void run() {
-                TRTCLogger.i(TAG, "sendSpeechApplication speech application forbidden"
-                        + mIsSpeechApplicationForbidden);
+                TRTCLogger.i(TAG, "sendSpeechApplication speech application forbidden" + mIsSpeechApplicationForbidden);
                 if (mIsSpeechApplicationForbidden) {
                     callback.onError(CODE_ERROR, "the room speech application forbidden");
                     return;
                 }
-                mIMService.sendSpeechApplication(callback);
+                // todo 找不到 sendSpeechApplication
+          //      mIMService.sendSpeechApplication(callback);
             }
         });
     }
@@ -647,7 +965,8 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
             @Override
             public void run() {
                 TRTCLogger.i(TAG, "cancelSpeechApplication");
-                mIMService.cancelSpeechApplication(callback);
+                // todo 找不到 cancelSpeechApplication
+          //      mIMService.cancelSpeechApplication(callback);
             }
         });
     }
@@ -659,7 +978,8 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
             @Override
             public void run() {
                 TRTCLogger.i(TAG, "replySpeechApplication agree: " + agree + " userId: " + userId);
-                mIMService.replySpeechApplication(agree, userId, callback);
+                // todo 找不到 replySpeechApplication
+          //      mIMService.replySpeechApplication(agree, userId, callback);
             }
         });
     }
@@ -670,7 +990,8 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
             @Override
             public void run() {
                 TRTCLogger.i(TAG, "forbidSpeechApplication forbid: " + forbid);
-                mIMService.forbidSpeechApplication(forbid, callback);
+                // todo 找不到 forbidSpeechApplication
+          //      mIMService.forbidSpeechApplication(forbid, callback);
             }
         });
     }
@@ -681,7 +1002,8 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
             @Override
             public void run() {
                 TRTCLogger.i(TAG, "sendOffSpeaker userId: " + userId);
-                mIMService.sendOffSpeaker(userId, callback);
+                // todo 找不到 sendOffSpeaker
+         //       mIMService.sendOffSpeaker(userId, callback);
             }
         });
     }
@@ -692,7 +1014,8 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
             @Override
             public void run() {
                 TRTCLogger.i(TAG, "sendOffAllSpeakers");
-                mIMService.sendOffAllSpeakers(mAnchorList, callback);
+                // todo 找不到 sendOffAllSpeakers
+         //       mIMService.sendOffAllSpeakers(mAnchorList, callback);
             }
         });
     }
@@ -703,7 +1026,19 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
             @Override
             public void run() {
                 TRTCLogger.i(TAG, "exitSpeechState");
-                mTRTCService.switchToAudience(new TRTCService.OnSwitchListener() {
+                mTUIRoomEngine.changeUserRole("", 0, new TUIRoomEngineDef.ActionCallback() { // todo 参数有误
+                    @Override
+                    public void onSuccess() {
+                        onTRTCAnchorExit(mSelfUserId);
+                        callback.onCallback(0, null);
+                    }
+
+                    @Override
+                    public void onError(int i, String s) {
+                        callback.onCallback(i, s);
+                    }
+                });
+/*                mTRTCService.switchToAudience(new TRTCService.OnSwitchListener() {
                     @Override
                     public void onTRTCSwitchRole(int code, String message) {
                         if (code == 0) {
@@ -711,7 +1046,7 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
                         }
                         callback.onCallback(code, message);
                     }
-                });
+                });*/
             }
         });
     }
@@ -723,7 +1058,8 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
             @Override
             public void run() {
                 TRTCLogger.i(TAG, "startScreenCapture");
-                mTRTCService.startScreenCapture(param, screenShareParams);
+                mTUIRoomEngine.startScreenSharing(0, null);
+                //   mTRTCService.startScreenCapture(param, screenShareParams);
             }
         });
     }
@@ -734,7 +1070,8 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
             @Override
             public void run() {
                 TRTCLogger.i(TAG, "stopScreenCapture");
-                mTRTCService.stopScreenCapture();
+                mTUIRoomEngine.stopScreenSharing();
+                //    mTRTCService.stopScreenCapture();
             }
         });
 
@@ -743,7 +1080,8 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
     @Override
     public TXBeautyManager getBeautyManager() {
         TRTCLogger.i(TAG, "getBeautyManager");
-        return mTRTCService.getTXBeautyManager();
+        return mTRTCCloud.getBeautyManager();
+        //    return mTRTCService.getTXBeautyManager();
     }
 
     @Override
@@ -751,7 +1089,8 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
         runOnMainThread(new Runnable() {
             @Override
             public void run() {
-                mTRTCService.setNetworkQosParam(qosParam);
+                mTRTCCloud.setNetworkQosParam(qosParam);
+                //    mTRTCService.setNetworkQosParam(qosParam);
             }
         });
     }
@@ -762,7 +1101,9 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
             @Override
             public void run() {
                 TRTCLogger.i(TAG, "setAudioQuality quality : " + quality);
-                mTRTCService.setAudioQuality(quality);
+                mTUIRoomEngine.setAudioProfile(quality == 0 ? TUIRoomEngineDef.AudioProfile.SPEECH :
+                        quality == 1 ? TUIRoomEngineDef.AudioProfile.DEFAULT : TUIRoomEngineDef.AudioProfile.MUSIC);
+                //    mTRTCService.setAudioQuality(quality);
             }
         });
     }
@@ -773,7 +1114,13 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
             @Override
             public void run() {
                 TRTCLogger.i(TAG, "setVideoResolution resolution : " + resolution);
-                mTRTCService.setVideoResolution(resolution);
+                TUIRoomEngineDef.VideoProfile videoProfile =
+                        resolution == 0 ? TUIRoomEngineDef.VideoProfile.LOW_DEFINITION :
+                                resolution == 1 ? TUIRoomEngineDef.VideoProfile.STANDARD_DEFINITION :
+                                        resolution == 2 ? TUIRoomEngineDef.VideoProfile.HIGH_DEFINITION :
+                                                TUIRoomEngineDef.VideoProfile.SUPER_DEFINITION;
+                mTUIRoomEngine.setVideoProfile(videoProfile);
+                //     mTRTCService.setVideoResolution(resolution);
             }
         });
     }
@@ -784,7 +1131,8 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
             @Override
             public void run() {
                 TRTCLogger.i(TAG, "setAudioQuality fps : " + fps);
-                mTRTCService.setVideoFps(fps);
+                // todo 找不到 setVideoFps
+          //      mTRTCService.setVideoFps(fps);
             }
         });
     }
@@ -795,7 +1143,8 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
             @Override
             public void run() {
                 TRTCLogger.i(TAG, "setVideoBitrate fps : " + bitrate);
-                mTRTCService.setVideoBitrate(bitrate);
+                // todo 找不到
+          //      mTRTCService.setVideoBitrate(bitrate);
             }
         });
     }
@@ -806,7 +1155,12 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
             @Override
             public void run() {
                 TRTCLogger.i(TAG, "enableAudioEvaluation enable : " + enable);
-                mTRTCService.enableAudioEvaluation(enable);
+                if (enable) {
+                    mTRTCCloud.enableAudioVolumeEvaluation(300);
+                } else {
+                    mTRTCCloud.enableAudioVolumeEvaluation(0);
+                }
+                //     mTRTCService.enableAudioEvaluation(enable);
             }
         });
     }
@@ -817,7 +1171,8 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
             @Override
             public void run() {
                 TRTCLogger.i(TAG, "setAudioPlayVolume volume : " + volume);
-                mTRTCService.setAudioPlayoutVolume(volume);
+                mTRTCCloud.setAudioPlayoutVolume(volume);
+                //    mTRTCService.setAudioPlayoutVolume(volume);
             }
         });
     }
@@ -828,7 +1183,8 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
             @Override
             public void run() {
                 TRTCLogger.i(TAG, "setAudioCaptureVolume volume : " + volume);
-                mTRTCService.setAudioCaptureVolume(volume);
+                mTRTCCloud.setAudioCaptureVolume(volume);
+                //    mTRTCService.setAudioCaptureVolume(volume);
             }
         });
     }
@@ -839,7 +1195,8 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
             @Override
             public void run() {
                 TRTCLogger.i(TAG, "startFileDumping");
-                mTRTCService.startFileDumping(params);
+                mTRTCCloud.startAudioRecording(params);
+                //    mTRTCService.startFileDumping(params);
             }
         });
     }
@@ -850,7 +1207,8 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
             @Override
             public void run() {
                 TRTCLogger.i(TAG, "stopFileDumping");
-                mTRTCService.stopFileDumping();
+                mTRTCCloud.stopAudioRecording();
+                //     mTRTCService.stopFileDumping();
             }
         });
     }
@@ -861,14 +1219,27 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
             @Override
             public void run() {
                 TRTCLogger.i(TAG, "onRoomDestroy : " + roomId);
-                mTRTCService.exitRoom(new TUIRoomCoreCallback.ActionCallback() {
+                mTUIRoomEngine.exitRoomAsync(new TUIRoomEngineDef.ActionCallback() {
+                    @Override
+                    public void onSuccess() {
+                        if (mTUIRoomCoreListener != null) {
+                            mTUIRoomCoreListener.onDestroyRoom();
+                        }
+                    }
+
+                    @Override
+                    public void onError(int i, String s) {
+
+                    }
+                });
+/*                mTRTCService.exitRoom(new TUIRoomCoreCallback.ActionCallback() {
                     @Override
                     public void onCallback(int code, String msg) {
                         if (mTUIRoomCoreListener != null) {
                             mTUIRoomCoreListener.onDestroyRoom();
                         }
                     }
-                });
+                });*/
             }
         });
     }
@@ -912,7 +1283,33 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
                         tuiUserInfo.role = TUIRoomCoreDef.Role.ANCHOR;
                     }
                 } else {
-                    mIMService.getUserInfo(userId, new TXUserInfoCallback() {
+                    mTUIRoomEngine.getUserInfo(userId, new TUIRoomEngineDef.GetUserInfoCallback() {
+                        @Override
+                        public void onSuccess(TUIRoomEngineDef.UserInfo info) {
+                            final TUIRoomEngineDef.UserInfo userInfo = info;
+                            runOnMainThread(new Runnable() {
+                                @Override
+                                public void run() {
+                                    TUIRoomCoreDef.UserInfo tuiUserInfo = new TUIRoomCoreDef.UserInfo();
+                                    tuiUserInfo.userId = userInfo.userId;
+                                    tuiUserInfo.userName = userInfo.userName;
+                                    tuiUserInfo.userAvatar = userInfo.avatarUrl;
+                                    // todo 这里再确认一下
+                                    tuiUserInfo.role = userInfo.role == 0 ? TUIRoomCoreDef.Role.MASTER :
+                                            userInfo.role == 1 ? TUIRoomCoreDef.Role.MANAGER :
+                                                    TUIRoomCoreDef.Role.AUDIENCE;
+                                    mUserInfoList.add(tuiUserInfo);
+                                    mUserInfoMap.put(userInfo.userId, tuiUserInfo);
+                                }
+                            });
+                        }
+
+                        @Override
+                        public void onError(int i, String s) {
+
+                        }
+                    });
+/*                    mIMService.getUserInfo(userId, new TXUserInfoCallback() {
                         @Override
                         public void onCallback(int code, String msg, final TXUserInfo userInfo) {
                             runOnMainThread(new Runnable() {
@@ -932,7 +1329,7 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
                                 }
                             });
                         }
-                    });
+                    });*/
                 }
                 if (mTUIRoomCoreListener != null) {
                     mTUIRoomCoreListener.onRemoteUserEnterSpeechState(userId);
@@ -1072,7 +1469,35 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
             public void run() {
                 final TUIRoomCoreDef.UserInfo tuiUserInfo = mUserInfoMap.get(userId);
                 if (tuiUserInfo == null) {
-                    mIMService.getUserInfo(userId, new TXUserInfoCallback() {
+                    mTUIRoomEngine.getUserInfo(userId, new TUIRoomEngineDef.GetUserInfoCallback() {
+                        @Override
+                        public void onSuccess(TUIRoomEngineDef.UserInfo info) {
+                            final TUIRoomEngineDef.UserInfo userInfo = info;
+                            runOnMainThread(new Runnable() {
+                                @Override
+                                public void run() {
+                                    TUIRoomCoreDef.UserInfo tuiUserInfo = new TUIRoomCoreDef.UserInfo();
+                                    tuiUserInfo.userId = userInfo.userId;
+                                    tuiUserInfo.userName = userInfo.userName;
+                                    tuiUserInfo.userAvatar = userInfo.avatarUrl;
+                                    tuiUserInfo.role = TUIRoomCoreDef.Role.MASTER;
+                                    mUserInfoList.add(tuiUserInfo);
+                                    mUserInfoMap.put(userInfo.userId, tuiUserInfo);
+                                    tuiUserInfo.isSharingScreen = available;
+                                    if (mTUIRoomCoreListener != null) {
+                                        mTUIRoomCoreListener.onRemoteUserScreenVideoAvailable(userId, available);
+                                    }
+                                }
+                            });
+                        }
+
+                        @Override
+                        public void onError(int i, String s) {
+
+                        }
+                    });
+
+/*                    mIMService.getUserInfo(userId, new TXUserInfoCallback() {
                         @Override
                         public void onCallback(int code, String msg, final TXUserInfo userInfo) {
                             runOnMainThread(new Runnable() {
@@ -1092,7 +1517,7 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
                                 }
                             });
                         }
-                    });
+                    });*/
                 } else {
                     tuiUserInfo.isSharingScreen = available;
                     if (mTUIRoomCoreListener != null) {
@@ -1142,8 +1567,7 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
                         tuiUserInfo.userId = userInfo.userId;
                         tuiUserInfo.userName = userInfo.userName;
                         tuiUserInfo.userAvatar = userInfo.avatarURL;
-                        tuiUserInfo.role = userInfo.isOwner ? TUIRoomCoreDef.Role.MASTER :
-                                TUIRoomCoreDef.Role.AUDIENCE;
+                        tuiUserInfo.role = userInfo.isOwner ? TUIRoomCoreDef.Role.MASTER : TUIRoomCoreDef.Role.AUDIENCE;
                         if (userInfo.isOwner) {
                             tuiUserInfo.role = TUIRoomCoreDef.Role.MASTER;
                         } else {
@@ -1185,7 +1609,8 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
                 TRTCLogger.i(TAG, "onMicrophoneMuted muted: " + muted);
                 mIsMutedMicByMaster = muted;
                 if (muted) {
-                    mTRTCService.stopMicrophone();
+                    mTUIRoomEngine.closeLocalMicrophone();
+                    //    mTRTCService.stopMicrophone();
                 }
                 if (mTUIRoomCoreListener != null) {
                     mTUIRoomCoreListener.onMicrophoneMuted(muted);
@@ -1200,12 +1625,14 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
             @Override
             public void run() {
                 TRTCLogger.i(TAG, "onAllMicrophoneMuted muted: " + muted);
-                if (mIMService.isOwner()) {
+                // todo 找不到
+/*                if (mIMService.isOwner()) {
                     return;
-                }
+                }*/
                 mIsMutedMicByMaster = muted;
                 if (muted) {
-                    mTRTCService.stopMicrophone();
+                    mTUIRoomEngine.closeLocalMicrophone();
+                    //    mTRTCService.stopMicrophone();
                 }
                 if (mTUIRoomCoreListener != null) {
                     mTUIRoomCoreListener.onMicrophoneMuted(muted);
@@ -1222,7 +1649,8 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
                 TRTCLogger.i(TAG, "onCameraMuted muted: " + muted);
                 mIsMutedCameraByMaster = muted;
                 if (muted) {
-                    mTRTCService.stopCameraPreview();
+                    mTUIRoomEngine.closeLocalCamera();
+                    //    mTRTCService.stopCameraPreview();
                 }
                 if (mTUIRoomCoreListener != null) {
                     mTUIRoomCoreListener.onCameraMuted(muted);
@@ -1237,12 +1665,14 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
             @Override
             public void run() {
                 TRTCLogger.i(TAG, "onAllCameraMuted muted: " + muted);
-                if (mIMService.isOwner()) {
+                //todo
+/*                if (mIMService.isOwner()) {
                     return;
-                }
+                }*/
                 mIsMutedCameraByMaster = muted;
                 if (muted) {
-                    mTRTCService.stopCameraPreview();
+                    mTUIRoomEngine.closeLocalCamera();
+                    //    mTRTCService.stopCameraPreview();
                 }
                 if (mTUIRoomCoreListener != null) {
                     mTUIRoomCoreListener.onCameraMuted(muted);
@@ -1308,8 +1738,8 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
                 if (previousUserInfo != null) {
                     previousUserInfo.role = TUIRoomCoreDef.Role.ANCHOR;
                 }
-                TRTCLogger.i(TAG, "onRoomMasterChanged currentUserInfo: " + currentUserInfo
-                        + " previousUserInfo: " + previousUserInfo);
+                TRTCLogger.i(TAG, "onRoomMasterChanged currentUserInfo: " + currentUserInfo + " previousUserInfo: "
+                        + previousUserInfo);
                 if (mTUIRoomCoreListener != null) {
                     mTUIRoomCoreListener.onRoomMasterChanged(previousUserId, currentUserId);
                 }
@@ -1368,15 +1798,15 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
             public void run() {
                 TRTCLogger.i(TAG, "onSpeechApplicationForbidden isForbidden: " + isForbidden);
                 mIsSpeechApplicationForbidden = isForbidden;
-                if (mIMService.isOwner()) {
+/*                if (mIMService.isOwner()) {  // todo
                     return;
-                }
+                }*/
                 if (isForbidden) {
                     exitSpeechState(new TUIRoomCoreCallback.ActionCallback() {
                         @Override
                         public void onCallback(int code, String msg) {
-                            TRTCLogger.i(TAG, "onSpeechApplicationForbidden, exitSpeechState, code:"
-                                    + code + " msg:" + msg);
+                            TRTCLogger.i(TAG,
+                                    "onSpeechApplicationForbidden, exitSpeechState, code:" + code + " msg:" + msg);
                         }
                     });
                 }
@@ -1393,7 +1823,8 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
             @Override
             public void run() {
                 TRTCLogger.i(TAG, "onReceiveKickedOff, userId:" + userId);
-                if (mIMService.isOwner()) {
+                //todo
+/*                if (mIMService.isOwner()) {
                     destroyRoom(new TUIRoomCoreCallback.ActionCallback() {
                         @Override
                         public void onCallback(int code, String msg) {
@@ -1413,7 +1844,7 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
                             }
                         }
                     });
-                }
+                }*/
             }
         });
     }
@@ -1481,13 +1912,15 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
     }
 
     private void initGroupNotification() {
-        GroupNotificationData groupNotificationData = mIMService.getGroupNotificationData();
+        // todo
+        GroupNotificationData groupNotificationData = new GroupNotificationData();
+     //   GroupNotificationData groupNotificationData = mIMService.getGroupNotificationData();
         if (groupNotificationData == null) {
             return;
         }
         TRTCLogger.i(TAG, "initGroupNotification group notification: " + groupNotificationData);
-        mSpeechMode = SignallingConstant.VALUE_APPLY_SPEECH.equals(groupNotificationData.getSpeechMode())
-                ? TUIRoomCoreDef.SpeechMode.APPLY_SPEECH : TUIRoomCoreDef.SpeechMode.FREE_SPEECH;
+        mSpeechMode = SignallingConstant.VALUE_APPLY_SPEECH.equals(groupNotificationData.getSpeechMode()) ?
+                TUIRoomCoreDef.SpeechMode.APPLY_SPEECH : TUIRoomCoreDef.SpeechMode.FREE_SPEECH;
         mIsChatRoomMuted = groupNotificationData.isChatRoomMuted();
         mIsMutedCameraByMaster = groupNotificationData.isAllCameraMuted();
         mIsMutedMicByMaster = groupNotificationData.isAllMicMuted();
@@ -1498,7 +1931,20 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
         runOnMainThread(new Runnable() {
             @Override
             public void run() {
-                List<TXUserInfo> txmUserInfoList = mIMService.getUserInfoList();
+                mTUIRoomEngine.getUserList(0, new TUIRoomEngineDef.GetUserListCallback() {
+                    @Override
+                    public void onSuccess(TUIRoomEngineDef.UserListResult userListResult) {
+
+                    }
+
+                    @Override
+                    public void onError(int i, String s) {
+
+                    }
+                });
+                // todo
+                List<TXUserInfo> txmUserInfoList = new ArrayList<>();
+           //     List<TXUserInfo> txmUserInfoList = mIMService.getUserInfoList();
                 if (txmUserInfoList == null) {
                     TRTCLogger.i(TAG, "init serInfoList txmUserInfoList is null: ");
                     return;
@@ -1509,8 +1955,7 @@ public class TUIRoomCoreImpl extends TUIRoomCore implements TXTRTCRoomListener, 
                         tuiUserInfo.userId = userInfo.userId;
                         tuiUserInfo.userName = userInfo.userName;
                         tuiUserInfo.userAvatar = userInfo.avatarURL;
-                        tuiUserInfo.role = userInfo.isOwner ? TUIRoomCoreDef.Role.MASTER :
-                                TUIRoomCoreDef.Role.AUDIENCE;
+                        tuiUserInfo.role = userInfo.isOwner ? TUIRoomCoreDef.Role.MASTER : TUIRoomCoreDef.Role.AUDIENCE;
                         mUserInfoList.add(tuiUserInfo);
                         mUserInfoMap.put(userInfo.userId, tuiUserInfo);
                     }

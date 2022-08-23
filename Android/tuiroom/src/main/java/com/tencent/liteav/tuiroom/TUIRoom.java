@@ -3,6 +3,7 @@ package com.tencent.liteav.tuiroom;
 import android.content.Context;
 
 import com.tencent.liteav.tuiroom.model.TUIRoomCoreDef;
+import com.tencent.tuikit.engine.room.TUIRoomEngineDef;
 
 public abstract class TUIRoom {
     /**
@@ -24,7 +25,7 @@ public abstract class TUIRoom {
      * @param isOpenCamera     whether to open the camera
      * @param isOpenMicrophone whether to open the microphone
      */
-    public abstract void createRoom(int roomId, TUIRoomCoreDef.SpeechMode speechMode, boolean isOpenCamera,
+    public abstract void createRoom(int roomId, TUIRoomEngineDef.SpeechMode speechMode, boolean isOpenCamera,
                                     boolean isOpenMicrophone);
 
     /**

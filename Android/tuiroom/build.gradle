@@ -19,6 +19,8 @@ android {
 
 dependencies {
     api fileTree(dir: 'libs', include: ['*.jar'])
+    api(name:'sdk-debug-1.0.8', ext:'aar')
+    api(name:'imsdk-plus-6.6.3002', ext:'aar')
     api "androidx.multidex:multidex:2.0.0"
     api "androidx.recyclerview:recyclerview:1.0.0"
     api "androidx.appcompat:appcompat:1.0.0"
@@ -34,8 +36,7 @@ dependencies {
     api "com.google.code.gson:gson:2.3.1"
     api "com.blankj:utilcode:1.25.9"
     api rootProject.ext.liteavSdk
-    api rootProject.ext.imSdk
     api project(':tuibeauty')
-    api 'com.tencent.liteav.tuikit:tuicore:latest.release'
+    api project(':tuicore')
     api project(':debug')
 }

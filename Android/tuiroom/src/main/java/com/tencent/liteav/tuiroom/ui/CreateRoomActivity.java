@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
 import android.text.TextUtils;
+import android.util.Log;
 import android.view.View;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
@@ -17,6 +18,8 @@ import androidx.appcompat.widget.Toolbar;
 
 import com.blankj.utilcode.util.ToastUtils;
 import com.tencent.liteav.basic.IntentUtils;
+import com.tencent.liteav.basic.UserModel;
+import com.tencent.liteav.basic.UserModelManager;
 import com.tencent.liteav.tuiroom.R;
 import com.tencent.liteav.tuiroom.TUIRoom;
 import com.tencent.liteav.tuiroom.model.TUIRoomCoreDef;
@@ -24,6 +27,7 @@ import com.tencent.liteav.tuiroom.ui.utils.StateBarUtils;
 import com.tencent.liteav.tuiroom.ui.widget.settingitem.BaseSettingItem;
 import com.tencent.liteav.tuiroom.ui.widget.settingitem.SwitchSettingItem;
 import com.tencent.qcloud.tuicore.TUILogin;
+import com.tencent.tuikit.engine.room.TUIRoomEngineDef;
 
 import java.util.ArrayList;
 
@@ -49,8 +53,10 @@ public class CreateRoomActivity extends AppCompatActivity {
     }
 
     private void initData() {
-        String userId = TUILogin.getUserId();
-        String userName = TUILogin.getNickName();
+        final UserModelManager manager = UserModelManager.getInstance();
+        final UserModel userModel = manager.getUserModel();
+        String userId = userModel.userId;
+        String userName = userModel.userName;
         if (!TextUtils.isEmpty(userId)) {
             String roomId = String.valueOf(getRoomId(userId));
             mRoomIdTv.setText(roomId);
@@ -61,9 +67,10 @@ public class CreateRoomActivity extends AppCompatActivity {
     }
 
     private void enterRoom() {
+        Log.e("AAAAA", "CreateRoomActivity enterRoom");
         int roomId = getRoomId(TUILogin.getUserId());
         TUIRoom tuiRoom = TUIRoom.sharedInstance(this);
-        tuiRoom.createRoom(roomId, TUIRoomCoreDef.SpeechMode.FREE_SPEECH, mOpenCamera, mOpenAudio);
+        tuiRoom.createRoom(roomId, TUIRoomEngineDef.SpeechMode.APPLY, mOpenCamera, mOpenAudio);
     }
 
     private void initView() {
